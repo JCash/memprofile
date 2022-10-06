@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
+#include <stdatomic.h>
 #include <string.h> // strlen
 
 #if defined(__APPLE__)
@@ -28,19 +28,14 @@
 
 typedef volatile uint64_t uint64_atomic_t;
 
-uint64_atomic_t g_TotalNumAllocations = 0;
-uint64_atomic_t g_TotalMemAllocated = 0; 
-uint64_atomic_t g_NumAllocations = 0;        // Current
-uint64_atomic_t g_MemAllocated = 0;          // Current
-uint64_atomic_t g_Initialized = 0;           // Set after the initalization of the profiler is done
+atomic_size_t g_TotalNumAllocations = 0;
+atomic_size_t g_TotalMemAllocated = 0;
+atomic_size_t g_NumAllocations = 0;        // Current
+atomic_size_t g_MemAllocated = 0;          // Current
+atomic_size_t g_Initialized = 0;           // Set after the initalization of the profiler is done
 
-#if defined(__GNUC__)
-    #define ATOMICADD(_PTR, _VALUE)     __sync_fetch_and_add(_PTR, _VALUE)
-    #define ATOMICSUB(_PTR, _VALUE)     __sync_fetch_and_sub(_PTR, _VALUE)
-#else // windows
-    #define ATOMICADD(_PTR, _VALUE)     InterlockedAdd64(_PTR, _VALUE)
-    #define ATOMICSUB(_PTR, _VALUE)     InterlockedSub64(_PTR, _VALUE)
-#endif
+#define ATOMICADD(_PTR, _VALUE)     atomic_fetch_add(_PTR, _VALUE)
+#define ATOMICSUB(_PTR, _VALUE)     atomic_fetch_sub(_PTR, _VALUE)
 
 //#define DEBUG_ALLOCATIONS
 
@@ -106,12 +101,12 @@ void* FNNAME(realloc)(void* oldptr, size_t size)
     if (g_Initialized == 0)
         return realloc(oldptr, size);
 
+    size_t oldsize = MEMUSED(oldptr);
     void* ptr = realloc(oldptr, size);
     // The allocated size may be larger than the requested size
     // so in order to avoid over flow when subtracting later...
     size = MEMUSED(ptr);
 
-    size_t oldsize = MEMUSED(oldptr);
     debug("realloc: %zu (%zu) %p\n", size, oldsize, ptr);
     ATOMICADD(&g_TotalNumAllocations, 1);
     if(oldptr == 0)
